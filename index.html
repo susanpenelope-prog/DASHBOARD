@@ -479,8 +479,8 @@ function hideLoad(){ document.getElementById('loading').classList.remove('show')
 function setStatus(s){
   const d=document.getElementById('sdot'), t=document.getElementById('stxt');
   d.className='sdot';
-  if(s==='live'){ d.style.background='var(--sage)'; d.classList.add(''); t.textContent='Google Sheets · Tiempo Real'; }
-  if(s==='err') { d.style.background='var(--red)';  d.classList.add('err'); t.textContent='Error de conexión'; }
+  if(s==='live'){ d.style.background='var(--sage)'; t.textContent='Google Sheets · Tiempo Real'; }
+  if(s==='err') { d.style.background='var(--red)';  d.classList.add('err');  t.textContent='Error de conexión'; }
   if(s==='demo'){ d.style.background='var(--gold)'; d.classList.add('demo'); t.textContent='Modo Demo'; }
 }
 
@@ -516,8 +516,25 @@ function showErr(msg){ const e=document.getElementById('err-msg'); e.textContent
 function buildDashboard(d){
   hideLoad();
   document.getElementById('main').classList.add('show');
-  flujoData = d.flujo || [];
-  obrasData = d.obras || [];
+
+  /* Normalizar TODAS las filas al entrar — defensivo total */
+  flujoData = (d.flujo || []).map(r => ({
+    fecha:  String(r.fecha||'—').trim()||'—',
+    tipo:   String(r.tipo||'').toLowerCase().includes('ingr') ? 'Ingreso' : 'Egreso',
+    cat:    String(r.cat||'general').trim()||'general',
+    desc:   String(r.desc||'—').trim()||'—',
+    monto:  Number(r.monto)||0,
+    estado: String(r.estado||'').toLowerCase().includes('proy') ? 'Proyectado' : 'Realizado',
+    cot:    String(r.cot||'—').trim()||'—'
+  }));
+  obrasData = (d.obras || []).map(o => ({
+    cot:     String(o.cot||'—').trim()||'—',
+    cliente: String(o.cliente||'Sin nombre').trim(),
+    bruto:   Number(o.bruto)||0,
+    costos:  Number(o.costos)||0,
+    neto:    Number(o.neto)||0,
+    margen:  Number(o.margen)||0
+  }));
 
   /* Cálculos derivados en frontend (igual que fórmula I2) */
   const ingReal  = flujoData.filter(r=>r.tipo==='Ingreso'&&r.estado==='Realizado').reduce((s,r)=>s+r.monto,0);
@@ -572,22 +589,39 @@ function buildDashboard(d){
 const fmt  = n => '$'+Math.round(Math.abs(n)).toLocaleString('es-CL');
 const fmtM = n => { if(n>=1000000)return '$'+(n/1000000).toFixed(1)+'M'; if(n>=1000)return '$'+(n/1000).toFixed(0)+'k'; return '$'+n; };
 
+/* ── NORMALIZAR FILA (defensivo contra mayúsculas/minúsculas del script) ── */
+function normRow(r){
+  const tipo   = String(r.tipo||'').trim();
+  const estado = String(r.estado||'').trim();
+  const esIng  = tipo.toLowerCase().includes('ingr');
+  const esProy = estado.toLowerCase().includes('proy');
+  return {
+    fecha:  String(r.fecha||'—'),
+    tipo:   esIng ? 'Ingreso' : 'Egreso',
+    cat:    String(r.cat||'general').trim() || 'general',
+    desc:   String(r.desc||'—').trim() || '—',
+    monto:  Number(r.monto)||0,
+    estado: esProy ? 'Proyectado' : 'Realizado',
+    cot:    String(r.cot||'—').trim() || '—'
+  };
+}
+
 /* ── TABLA FLUJO ── */
 function renderTablaFlujo(){
-  let d = flujoData;
+  let d = flujoData.map(normRow);
   if(curFilt==='R') d=d.filter(r=>r.estado==='Realizado');
   else if(curFilt==='P') d=d.filter(r=>r.estado==='Proyectado');
   else if(curFilt==='I') d=d.filter(r=>r.tipo==='Ingreso');
   else if(curFilt==='E') d=d.filter(r=>r.tipo==='Egreso');
   document.getElementById('flujo-body').innerHTML = d.map(r=>`
     <tr>
-      <td class="mono" style="font-size:10px;color:var(--mist)">${r.fecha||'—'}</td>
+      <td class="mono" style="font-size:10px;color:var(--mist)">${r.fecha}</td>
       <td><span class="${r.tipo==='Ingreso'?'ti':'te'}">${r.tipo}</span></td>
-      <td style="font-size:11px;color:var(--steel)">${r.cat||'—'}</td>
-      <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.desc||'—'}</td>
-      <td style="text-align:right" class="mono ${r.tipo==='Ingreso'?'vp':'vn'}">${fmt(r.monto)}</td>
+      <td style="font-size:11px;color:var(--steel)">${r.cat}</td>
+      <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.desc}</td>
+      <td style="text-align:right;font-family:var(--mono);font-size:11px;color:${r.tipo==='Ingreso'?'var(--sage)':'var(--rust)'}">${fmt(r.monto)}</td>
       <td><span class="${r.estado==='Proyectado'?'tp':'ti'}">${r.estado}</span></td>
-      <td class="mono" style="font-size:10px;color:var(--mist)">${r.cot||'—'}</td>
+      <td class="mono" style="font-size:10px;color:var(--mist)">${r.cot}</td>
     </tr>`).join('');
 }
 function ff(f,btn){ curFilt=f; document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderTablaFlujo(); }
